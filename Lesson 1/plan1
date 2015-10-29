@@ -1,0 +1,3 @@
+# since client side routing
+#/create - Create a contact
+#/edit/:id - Edit a contact
