@@ -98,6 +98,27 @@ app.directive('ccSpinner', function () {
     }
 });
 
+//to use tag converted to cc-spinner rather than camel-case
+app.directive('ccCard', function () {
+    return {
+        'restrict': 'AE',
+        'templateUrl': 'templates/card.html',
+        'scope': {
+            'user': '=',
+        },
+        'controller': function ($scope, ContactService) {
+            $scope.isDeleting = false;
+            $scope.deleteUser = function () {
+                $scope.isDeleting = true;
+                ContactService.removeContact($scope.user).then(function() {
+                    $scope.isDeleting = false;
+                    //
+                });
+            };
+        }
+    }
+});
+
 app.controller('PersonDetailController', function ($scope, $stateParams, $state, ContactService) {
     $scope.mode = "Edit";
 
@@ -140,20 +161,8 @@ app.controller('PersonListController', function ($scope, $modal, ContactService)
     $scope.contacts = ContactService;
 
     $scope.loadMore = function () {
-        console.log("Load More!!!");
         $scope.contacts.loadMore();
     };
-
-    $scope.showCreateModal = function () {
-        $scope.contacts.selectedPerson = {};
-        $scope.createModal = $modal({
-            scope: $scope,
-            template: 'templates/modal.create.tpl.html',
-            show: true
-        })
-    };
-
-
 });
 
 app.service('ContactService', function (Contact, $rootScope, $q, toaster) {
