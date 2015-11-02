@@ -10,51 +10,65 @@ var app = angular.module('codecraft', [
     'ui.router'
 ]);
 
-
 app.config(function ($stateProvider, $urlRouterProvider) {
     $stateProvider
-        //when referencing list use the following configuration
         .state('list', {
             url: "/",
-            templateUrl: 'templates/list.html',
-            controller: 'PersonListController'  //define the state's controller
+            views: {
+                'main': {
+                    templateUrl: 'templates/list.html',
+                    controller: 'PersonListController'
+                },
+                'search': {
+                    templateUrl: 'templates/searchform.html',
+                    controller: 'PersonListController'
+                }
+            }
         })
         .state('edit', {
             url: "/edit/:email",
-            templateUrl: 'templates/edit.html',
-            controller: 'PersonDetailController'
+            views: {
+                'main': {
+                    templateUrl: 'templates/edit.html',
+                    controller: 'PersonDetailController'
+                }
+            }
         })
-
         .state('create', {
             url: "/create",
-            templateUrl: 'templates/edit.html',
-            controller: 'PersonCreateController'
+            views: {
+                'main': {
+                    templateUrl: 'templates/edit.html',
+                    controller: 'PersonCreateController'
+                }
+            }
         });
+
     $urlRouterProvider.otherwise('/');
 });
 
-
-/*
- called when application bootstraps itself
- allows you to set default/pre-configured settings for values
- */
-app.config(function ($httpProvider, $resourceProvider, laddaProvider) {
+app.config(function ($httpProvider, $resourceProvider, laddaProvider, $datepickerProvider) {
     $httpProvider.defaults.headers.common['Authorization'] = 'Token 12896c4be1892acd2879e22c833e745839317913';
-    $resourceProvider.defaults.stripTrailingSlashes = false; // b/c of api must be used
+    $resourceProvider.defaults.stripTrailingSlashes = false;
     laddaProvider.setOption({
         style: 'expand-right'
     });
-
+    angular.extend($datepickerProvider.defaults, {
+        dateFormat: 'd/M/yyyy',
+        autoclose: true
+    });
 });
 
+app.filter('defaultImage', function () {
+    return function (input, param) {
+        if (!input) {
+            return param
+        }
+        return input;
+    }
+});
 
 app.factory("Contact", function ($resource) {
-    /*
-     :id is optional
-     if want to get a specific contact we pass the id
-
-     if it finds an id in the resource then use that id as a parameter
-     */
     return $resource("https://codecraftpro.com/api/samples/v1/contact/:id/", {id: '@id'}, {
         update: {
             method: 'PUT'
@@ -62,56 +76,65 @@ app.factory("Contact", function ($resource) {
     });
 });
 
-app.filter('defaultImage', function () {
-    return function (input, param) {
-        if (!input) {
-            return param;
+//to use tag converted to cc-spinner rather than camel-case
+app.directive('ccSpinner', function () {
+
+    /*
+     restrict used to specify how the directive can be used
+     AEC
+     A = attribute, <div cc-spinner></div>
+     E = element, <cc-spinner></cc-spinner>
+     C = class   <div class="cc-spinner"></div>
+
+     */
+
+    return {
+        'restrict': 'AE',
+        'templateUrl': 'templates/spinner.html',
+        'scope': {
+            'isLoading': '=',
+            'message': '@'
         }
-        return input;
-    };
+    }
 });
 
-app.controller('PersonCreateController', function ($scope, $state, ContactService) {
-    $scope.contacts = ContactService;
-
-    $scope.mode = "Create";
-
-    $scope.save = function () {
-        console.log("createContact");
-        //uses promise as call back to determine when to close modal
-        $scope.contacts.createContact($scope.contacts.selectedPerson)
-            .then(function () {
-                $state.go("list");
-            });
-    };
-
-});
-
-app.controller('PersonDetailController', function ($scope, ContactService, $stateParams, $state) {
-
-    console.log($stateParams);
-
+app.controller('PersonDetailController', function ($scope, $stateParams, $state, ContactService) {
     $scope.mode = "Edit";
 
     $scope.contacts = ContactService;
-
     $scope.contacts.selectedPerson = $scope.contacts.getPerson($stateParams.email);
+
 
     $scope.save = function () {
         $scope.contacts.updateContact($scope.contacts.selectedPerson).then(function () {
-            $state.go('list');
+            $state.go("list");
         });
 
     };
-    //uses promise as a callback to determine when function is complete
+
     $scope.remove = function () {
         $scope.contacts.removeContact($scope.contacts.selectedPerson).then(function () {
-            $state.go('list');
+            $state.go("list");
         });
+    }
+});
+
+app.controller('PersonCreateController', function ($scope, $state, ContactService) {
+    $scope.mode = "Create";
+
+    $scope.contacts = ContactService;
+
+    $scope.save = function () {
+        console.log("createContact");
+        $scope.contacts.createContact($scope.contacts.selectedPerson)
+            .then(function () {
+                $state.go("list");
+            })
     };
 });
 
-app.controller('PersonListController', function ($scope, ContactService, $modal) {
+app.controller('PersonListController', function ($scope, $modal, ContactService) {
+
     $scope.search = "";
     $scope.order = "email";
     $scope.contacts = ContactService;
@@ -122,8 +145,7 @@ app.controller('PersonListController', function ($scope, ContactService, $modal)
     };
 
     $scope.showCreateModal = function () {
-
-        $scope.contacts.selectedPerson = {};    //personis no longer being selected
+        $scope.contacts.selectedPerson = {};
         $scope.createModal = $modal({
             scope: $scope,
             template: 'templates/modal.create.tpl.html',
@@ -133,10 +155,8 @@ app.controller('PersonListController', function ($scope, ContactService, $modal)
 
 
 });
-/*
- q service is used to create promises you can return from functions
- */
-app.service('ContactService', function (Contact, $q, toaster, $rootScope) {
+
+app.service('ContactService', function (Contact, $rootScope, $q, toaster) {
 
 
     var self = {
@@ -144,15 +164,16 @@ app.service('ContactService', function (Contact, $q, toaster, $rootScope) {
             console.log(email);
             for (var i = 0; i < self.persons.length; i++) {
                 var obj = self.persons[i];
-                console.log(obj);
                 if (obj.email == email) {
                     return obj;
                 }
+
             }
         },
         'page': 1,
-        'hasMore': true, //assume always more
+        'hasMore': true,
         'isLoading': false,
+        'isSaving': false,
         'selectedPerson': null,
         'persons': [],
         'search': null,
@@ -160,96 +181,71 @@ app.service('ContactService', function (Contact, $q, toaster, $rootScope) {
         'doSearch': function () {
             self.hasMore = true;
             self.page = 1;
-            self.persons = [];  //empty array so that we have a blank page to add to
+            self.persons = [];
             self.loadContacts();
         },
         'doOrder': function () {
             self.hasMore = true;
             self.page = 1;
-            self.persons = [];  //empty array so that we have a blank page to add to
+            self.persons = [];
             self.loadContacts();
         },
         'loadContacts': function () {
-
-            //load new data if there is more to load and there isn't data alreading being loaded
             if (self.hasMore && !self.isLoading) {
-                //essentially acting as a binary semaphore
                 self.isLoading = true;
 
-                /*
-                 paramaters to pass to the api query
-                 page - page of the data
-                 search - string to look for in the data
-                 ordering - sets the order of the data that will be recieved
-                 */
                 var params = {
                     'page': self.page,
                     'search': self.search,
                     'ordering': self.ordering
                 };
 
-                /*
-                 get is proprietary to the api
-                 params - is the values taken by the api to determine the data that you are requesting
-                 */
                 Contact.get(params, function (data) {
                     console.log(data);
-                    //loop through the api response
                     angular.forEach(data.results, function (person) {
-
-
                         self.persons.push(new Contact(person));
                     });
 
-                    //is there more data to load?
                     if (!data.next) {
                         self.hasMore = false;
                     }
-
-                    //unlock resource
                     self.isLoading = false;
                 });
-
             }
-
 
         },
         'loadMore': function () {
             if (self.hasMore && !self.isLoading) {
-                self.page++;
+                self.page += 1;
                 self.loadContacts();
             }
         },
         'updateContact': function (person) {
             var d = $q.defer();
             self.isSaving = true;
-
-            //$update is a built in function
             person.$update().then(function () {
                 self.isSaving = false;
                 toaster.pop('success', 'Updated ' + person.name);
-                d.resolve();
+                d.resolve()
             });
             return d.promise;
         },
         'removeContact': function (person) {
             var d = $q.defer();
             self.isDeleting = true;
-            //$remove is a built in function
             person.$remove().then(function () {
                 self.isDeleting = false;
                 var index = self.persons.indexOf(person);
                 self.persons.splice(index, 1);
                 self.selectedPerson = null;
-                toaster.pop('success', 'Removed ' + person.name);
-                d.resolve();
+                toaster.pop('success', 'Deleted ' + person.name);
+                d.resolve()
             });
             return d.promise;
         },
         'createContact': function (person) {
             var d = $q.defer();
             self.isSaving = true;
-            //$update is a built in function
             Contact.save(person).$promise.then(function () {
                 self.isSaving = false;
                 self.selectedPerson = null;
@@ -258,9 +254,8 @@ app.service('ContactService', function (Contact, $q, toaster, $rootScope) {
                 self.persons = [];
                 self.loadContacts();
                 toaster.pop('success', 'Created ' + person.name);
-                d.resolve();    //callback
+                d.resolve()
             });
-            //returns whether or not promise has been resolved
             return d.promise;
         },
         'watchFilters': function () {
@@ -287,4 +282,5 @@ app.service('ContactService', function (Contact, $q, toaster, $rootScope) {
     self.watchFilters();
 
     return self;
+
 });
