@@ -1,4 +1,4 @@
-var app = angular.module('codecraft', [
+var app = angular.module('home', [
     'ngResource',
     'infinite-scroll',
     'angularSpinner',
